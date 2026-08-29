@@ -5,6 +5,9 @@ import yfinance as yf
 import pandas as pd
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from contextlib import asynccontextmanager
+import datetime
+from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime
+from sqlalchemy.orm import declarative_base, sessionmaker
 
 # ==========================================
 # ⚙️ الإعدادات العامة
@@ -13,8 +16,37 @@ TELEGRAM_BOT_TOKEN = "8867514375:AAGSH3HABzPZ9HMRvGgLygnZFs37-SbZ9ZE"
 TELEGRAM_CHAT_ID = "8015039751"
 
 # ==========================================
-# 📊 قائمة أسهم S&P 500
+# 🗄️ إعدادات قاعدة البيانات (حفظ الفرص)
 # ==========================================
+# نستخدم SQLite حالياً لسهولتها (يمكن لاحقاً استبدال الرابط بـ PostgreSQL)
+SQLALCHEMY_DATABASE_URL = "sqlite:///./alerts.db"
+engine = create_engine(SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread": False})
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+Base = declarative_base()
+
+class AlertRecord(Base):
+    __tablename__ = "alerts"
+    id = Column(Integer, primary_key=True, index=True)
+    ticker = Column(String, index=True)
+    price = Column(Float)
+    market_type = Column(String) # 'Stock' or 'Crypto'
+    timestamp = Column(DateTime, default=datetime.datetime.utcnow)
+
+Base.metadata.create_all(bind=engine)
+
+def save_alert_to_db(ticker: str, price: float, market_type: str):
+    db = SessionLocal()
+    new_alert = AlertRecord(ticker=ticker, price=price, market_type=market_type)
+    db.add(new_alert)
+    db.commit()
+    db.close()
+
+# ==========================================
+# 📊 قوائم المراقبة
+# ==========================================
+CRYPTO_WATCHLIST = ["BTC-USD", "ETH-USD", "SOL-USD", "AVAX-USD"]
+
+# قائمة S&P 500 (نفس القائمة الخاصة بك)
 WATCHLIST = [
     "AAPL", "ABBV", "ABT", "ACN", "ADBE", "ADI", "ADM", "ADP", "ADSK", "AEE",
     "AEP", "AES", "AFL", "AIG", "AIZ", "AJG", "AKAM", "ALB", "ALGN", "ALK",
@@ -73,143 +105,116 @@ scheduler = AsyncIOScheduler()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # جدولة فحص القائمة كاملة كل ساعة
-    scheduler.add_job(lambda: run_scanner_engine(target_stocks=WATCHLIST), 'interval', hours=1)
+    # جدولة فحص الأسهم كل ساعة
+    scheduler.add_job(lambda: run_scanner_engine(target_stocks=WATCHLIST, market_type="Stock"), 'interval', hours=1)
+    # جدولة فحص الكريبتو كل ساعتين
+    scheduler.add_job(lambda: run_scanner_engine(target_stocks=CRYPTO_WATCHLIST, market_type="Crypto"), 'interval', hours=2)
     scheduler.start()
-    print(f"🚀 Started Scheduler: Monitoring {len(WATCHLIST)} stocks.")
+    print(f"🚀 Started Scheduler: Monitoring Stocks & Crypto.")
     yield
     scheduler.shutdown()
 
-app = FastAPI(title="S&P 500 Fast & Flexible Scanner", lifespan=lifespan)
-
-@app.get("/")
-async def root():
-    return {"status": "online", "monitored_stocks": len(WATCHLIST)}
+app = FastAPI(title="Pro Market Scanner", lifespan=lifespan)
 
 async def send_telegram_message(chat_id: str, text: str):
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
-    payload = {
-        "chat_id": chat_id,
-        "text": text,
-        "parse_mode": "Markdown"
-    }
+    payload = {"chat_id": chat_id, "text": text, "parse_mode": "Markdown"}
     async with httpx.AsyncClient() as client:
         try:
             res = await client.post(url, json=payload, timeout=10.0)
             return res.status_code == 200
-        except Exception as e:
-            print(f"Error sending Telegram message: {e}")
+        except Exception:
             return False
 
 # ==========================================
-# ⚡ محرك الفحص الشامل (سهم واحد أو الجميع)
+# ⚡ محرك الفحص المتطور (SMC + RSI + Volume)
 # ==========================================
-async def run_scanner_engine(target_stocks: list = None, target_chat_id: str = TELEGRAM_CHAT_ID):
-    if target_stocks is None or len(target_stocks) == 0:
-        target_stocks = WATCHLIST
-
+async def run_scanner_engine(target_stocks: list = None, target_chat_id: str = TELEGRAM_CHAT_ID, market_type="Stock"):
     is_single_stock = len(target_stocks) == 1
-    print(f"Start scanning {len(target_stocks)} stock(s)...")
     matches_found = 0
-    batch_size = 20  # لتجنب حظر Yahoo Finance عند جلب كميات كبيرة
+    batch_size = 20
     
     for i in range(0, len(target_stocks), batch_size):
         chunk = target_stocks[i:i + batch_size]
         try:
             data = yf.download(chunk, period="3mo", interval="1d", progress=False, threads=False)
-            
             if data is None or data.empty:
                 continue
 
             for ticker in chunk:
                 try:
                     if isinstance(data.columns, pd.MultiIndex):
-                        if ticker not in data.columns.levels[1]:
-                            continue
+                        if ticker not in data.columns.levels[1]: continue
                         df = data.xs(ticker, level=1, axis=1).dropna()
                     else:
                         df = data.dropna()
 
-                    if df.empty or len(df) < 35:
-                        if is_single_stock:
-                            await send_telegram_message(target_chat_id, f"❌ لا توجد بيانات كافية للسهم `{ticker}`.")
-                        continue
+                    if df.empty or len(df) < 35: continue
 
                     close_series = df['Close']
-                    volume_series = df['Volume']
-                    close_price = float(close_series.iloc[-1])
-                    current_volume = float(volume_series.iloc[-1])
+                    open_series = df['Open']
+                    high_series = df['High']
+                    low_series = df['Low']
+                    vol_series = df['Volume']
+                    
+                    c_price = float(close_series.iloc[-1])
+                    
+                    # 1. تحليل السيولة
+                    avg_vol_20 = float(vol_series.tail(20).mean())
+                    vol_ratio = (float(vol_series.iloc[-1]) / avg_vol_20) if avg_vol_20 > 0 else 1.0
 
-                    ma20 = float(close_series.rolling(window=20).mean().iloc[-1])
-                    ma50 = float(close_series.rolling(window=50).mean().iloc[-1])
-
+                    # 2. مؤشر RSI
                     delta = close_series.diff()
                     gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
                     loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
-                    last_gain = float(gain.iloc[-1])
-                    last_loss = float(loss.iloc[-1])
-                    rs = last_gain / (last_loss if last_loss != 0 else 1)
+                    rs = float(gain.iloc[-1]) / (float(loss.iloc[-1]) if float(loss.iloc[-1]) != 0 else 1)
                     rsi_val = float(100 - (100 / (1 + rs)))
 
-                    ema12 = close_series.ewm(span=12, adjust=False).mean()
-                    ema26 = close_series.ewm(span=26, adjust=False).mean()
-                    macd_line = ema12 - ema26
-                    signal_line = macd_line.ewm(span=9, adjust=False).mean()
-                    macd_hist = macd_line - signal_line
+                    # 3. مفاهيم الأموال الذكية (SMC) - Order Blocks & FVG
+                    # أ. Bullish Fair Value Gap (FVG): قاع الشمعة الحالية أعلى من قمة الشمعة قبل السابقة
+                    has_bullish_fvg = float(low_series.iloc[-1]) > float(high_series.iloc[-3])
+                    
+                    # ب. Bullish Order Block (OB): شمعة هابطة قوية يليها ابتلاع شرائي
+                    prev_bearish = float(close_series.iloc[-2]) < float(open_series.iloc[-2])
+                    current_bullish = float(close_series.iloc[-1]) > float(open_series.iloc[-1])
+                    engulfing = float(close_series.iloc[-1]) > float(open_series.iloc[-2])
+                    is_order_block = prev_bearish and current_bullish and engulfing
 
-                    last_macd = float(macd_line.iloc[-1])
-                    last_signal = float(signal_line.iloc[-1])
-                    prev_hist = float(macd_hist.iloc[-2])
-                    last_hist = float(macd_hist.iloc[-1])
-
-                    is_macd_crossover = (last_macd > last_signal and prev_hist <= 0 and last_hist > 0)
-                    is_macd_bullish = (last_macd > last_signal)
-
-                    avg_vol_20 = float(volume_series.tail(20).mean())
-                    vol_ratio = (current_volume / avg_vol_20) if avg_vol_20 > 0 else 1.0
-
-                    support = float(df['Low'].tail(20).min())
-                    resistance = float(df['High'].tail(20).max())
-
-                    condition_macd = is_macd_crossover or is_macd_bullish
+                    # الشروط المجمعة
                     condition_volume = vol_ratio >= 1.2
-                    condition_rsi = 45 <= rsi_val <= 68
-                    condition_trend = close_price > ma20 and ma20 > ma50
+                    condition_rsi = 40 <= rsi_val <= 70
+                    condition_smc = has_bullish_fvg or is_order_block
 
-                    if condition_macd and condition_volume and condition_rsi and condition_trend:
+                    if condition_volume and condition_rsi and condition_smc:
                         matches_found += 1
+                        
+                        # حفظ الفرصة في قاعدة البيانات
+                        save_alert_to_db(ticker, c_price, market_type)
+                        
+                        smc_tag = "🟩 Order Block" if is_order_block else "🪟 FVG Gap"
+                        
                         alert_msg = (
-                            f"🚀 *تنبيه فرصة عالية الجودة | {ticker}*\n"
+                            f"🚀 *فرصة {market_type} | {ticker}*\n"
                             f"───────────────────\n"
-                            f"💵 *السعر الحالي:* `${round(close_price, 2)}`\n"
-                            f"🔊 *السيولة:* أعلى من المعدل بـ `{int((vol_ratio-1)*100)}%` 🔥\n"
-                            f"📊 *مؤشر RSI:* `{round(rsi_val, 1)}`\n"
-                            f"📈 *الاتجاه و MACD:* إيجابي وصاعد\n"
-                            f"🛡️ *الدعم:* `${round(support, 2)}` | 🎯 *المقاومة:* `${round(resistance, 2)}`"
+                            f"💵 *السعر:* `${round(c_price, 2)}`\n"
+                            f"🧠 *مؤشر SMC:* `{smc_tag}` 🔥\n"
+                            f"🔊 *السيولة:* `{round(vol_ratio, 2)}x` معدل طبيعي\n"
+                            f"📊 *مؤشر RSI:* `{round(rsi_val, 1)}`"
                         )
                         await send_telegram_message(target_chat_id, alert_msg)
                         await asyncio.sleep(0.5)
-                    elif is_single_stock:
-                        await send_telegram_message(
-                            target_chat_id, 
-                            f"ℹ️ السهم `{ticker}` لا يطابق شروط الدخول حالياً.\n"
-                            f"السعر: `${round(close_price, 2)}` | RSI: `{round(rsi_val, 1)}` | السيولة: `{round(vol_ratio, 2)}x`"
-                        )
 
                 except Exception as ex:
-                    print(f"Error processing {ticker}: {ex}")
                     continue
 
-        except Exception as e:
-            print(f"Batch error: {e}")
+        except Exception:
+            pass
 
         if not is_single_stock:
             await asyncio.sleep(1.5)
 
     if not is_single_stock:
-        await send_telegram_message(target_chat_id, f"✅ اكتمل فحص الـ {len(target_stocks)} سهم. تم إرسال {matches_found} فرصة مطابقة.")
-    
-    print(f"Scan finished. Matches: {matches_found}")
+        await send_telegram_message(target_chat_id, f"✅ اكتمل فحص `{market_type}`. تم العثور على {matches_found} فرصة وتخزينها بقاعدة البيانات.")
 
 # ==========================================
 # 💬 Endpoint استقبال أوامر تليجرام
@@ -223,55 +228,32 @@ async def handle_telegram_incoming(request: Request):
         parts = user_text.split()
         cmd = parts[0].lower()
 
-        # أمر /scan (سهم محدد أو الجميع)
         if cmd == "/scan":
             if len(parts) > 1:
-                # فحص سهم واحد فقط عبر شروط الإستراتيجية
                 ticker = parts[1].upper()
-                await send_telegram_message(chat_id, f"🔎 جاري تطبيق شروط الإستراتيجية على `{ticker}`...")
-                asyncio.create_task(run_scanner_engine(target_stocks=[ticker], target_chat_id=chat_id))
+                await send_telegram_message(chat_id, f"🔎 جاري فحص `{ticker}` بشروط SMC...")
+                asyncio.create_task(run_scanner_engine(target_stocks=[ticker], target_chat_id=chat_id, market_type="Stock"))
             else:
-                # فحص القائمة كاملة
-                await send_telegram_message(chat_id, f"🔎 جاري فحص جميع الأسهم ({len(WATCHLIST)} سهم) في الخلفية...")
-                asyncio.create_task(run_scanner_engine(target_stocks=WATCHLIST, target_chat_id=chat_id))
+                await send_telegram_message(chat_id, f"🔎 جاري فحص جميع الأسهم...")
+                asyncio.create_task(run_scanner_engine(target_stocks=WATCHLIST, target_chat_id=chat_id, market_type="Stock"))
+        
+        # أمر جديد لفحص الكريبتو فقط
+        elif cmd == "/scan_crypto":
+            await send_telegram_message(chat_id, f"🔎 جاري فحص العملات الرقمية (SMC)...")
+            asyncio.create_task(run_scanner_engine(target_stocks=CRYPTO_WATCHLIST, target_chat_id=chat_id, market_type="Crypto"))
 
-        # أمر /analyze أو /a للحصول على تقرير رقمي مباشر لأي سهم
-        elif cmd in ["/analyze", "/a"]:
-            if len(parts) > 1:
-                ticker = parts[1].upper()
-                await send_telegram_message(chat_id, f"⏳ جاري تحليل `{ticker}`...")
-                try:
-                    df = yf.download(ticker, period="6mo", interval="1d", progress=False)
-                    if isinstance(df.columns, pd.MultiIndex):
-                        df = df.xs(ticker, level=1, axis=1)
-
-                    if not df.empty and len(df) >= 35:
-                        c = float(df['Close'].iloc[-1])
-                        v = float(df['Volume'].iloc[-1])
-                        avg_v = float(df['Volume'].tail(20).mean())
-                        vr = round(v / avg_v, 2) if avg_v > 0 else 1.0
-
-                        delta = df['Close'].diff()
-                        gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
-                        loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
-                        rs = float(gain.iloc[-1]) / (float(loss.iloc[-1]) if float(loss.iloc[-1]) != 0 else 1)
-                        rsi = round(100 - (100 / (1 + rs)), 1)
-
-                        msg = (
-                            f"📊 *تحليل {ticker}*\n"
-                            f"───────────────────\n"
-                            f"💵 السعر الحالي: `${round(c, 2)}`\n"
-                            f"📈 RSI (14): `{rsi}`\n"
-                            f"🔊 معدل السيولة: `{vr}x`\n"
-                            f"🛡️ أدنى سعر 20 يوم: `${round(float(df['Low'].tail(20).min()), 2)}`\n"
-                            f"🎯 أعلى سعر 20 يوم: `${round(float(df['High'].tail(20).max()), 2)}`"
-                        )
-                        await send_telegram_message(chat_id, msg)
-                    else:
-                        await send_telegram_message(chat_id, f"❌ لا توجد بيانات كافية للسهم `{ticker}`.")
-                except Exception as e:
-                    await send_telegram_message(chat_id, f"❌ خطأ أثناء التحليل: {e}")
+        # أمر لمعرفة سجل الصفقات المحفوظة
+        elif cmd == "/history":
+            db = SessionLocal()
+            recent_alerts = db.query(AlertRecord).order_by(AlertRecord.id.desc()).limit(5).all()
+            db.close()
+            
+            if recent_alerts:
+                msg = "🗄️ *آخر 5 فرص تم رصدها:*\n\n"
+                for alert in recent_alerts:
+                    msg += f"• `{alert.ticker}` | `${round(alert.price, 2)}` | {alert.market_type}\n"
+                await send_telegram_message(chat_id, msg)
             else:
-                await send_telegram_message(chat_id, "⚠️ يرجى كتابة رمز السهم بعد الأمر، مثال:\n`/analyze TSLA`")
+                await send_telegram_message(chat_id, "🗄️ لا توجد فرص مسجلة في قاعدة البيانات بعد.")
 
     return {"status": "ok"}
