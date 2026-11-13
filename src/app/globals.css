@@ -1,0 +1,148 @@
+@import url("https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@300;400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap");
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --navy: #1e293b;
+  --blue: #0284c7;
+  --green: #10b981;
+  --orange: #f59e0b;
+  --red: #ef4444;
+  --bg: #f8fafc;
+  --card: #ffffff;
+  --border: #e2e8f0;
+  --muted: #64748b;
+  --sidebar: #0f172a;
+  --sidebar-hover: #1e293b;
+}
+
+html {
+  direction: rtl;
+}
+
+body {
+  font-family: "IBM Plex Sans Arabic", sans-serif;
+  background: var(--bg);
+  color: var(--navy);
+  min-height: 100vh;
+}
+
+.font-display {
+  font-family: "Space Grotesk", "IBM Plex Sans Arabic", sans-serif;
+}
+
+.bg-app {
+  background:
+    radial-gradient(ellipse 80% 50% at 100% -20%, rgba(2, 132, 199, 0.12), transparent),
+    radial-gradient(ellipse 60% 40% at 0% 100%, rgba(16, 185, 129, 0.08), transparent),
+    var(--bg);
+}
+
+.glass-panel {
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(12px);
+  border: 1px solid var(--border);
+}
+
+.kpi-card {
+  @apply rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm transition hover:shadow-md;
+}
+
+.btn-primary {
+  @apply inline-flex items-center justify-center gap-2 rounded-xl bg-sky-600 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-sky-700 disabled:opacity-50;
+}
+
+.btn-secondary {
+  @apply inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 transition hover:bg-slate-50;
+}
+
+.btn-danger {
+  @apply inline-flex items-center justify-center gap-2 rounded-xl bg-red-500 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-red-600;
+}
+
+.input {
+  @apply w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none transition focus:border-sky-500 focus:ring-2 focus:ring-sky-100;
+}
+
+.label {
+  @apply mb-1.5 block text-sm font-medium text-slate-700;
+}
+
+.table-wrap {
+  @apply overflow-x-auto rounded-2xl border border-slate-200 bg-white;
+}
+
+.data-table {
+  @apply w-full text-sm;
+}
+
+.data-table th {
+  @apply border-b border-slate-100 bg-slate-50 px-4 py-3 text-right font-semibold text-slate-600;
+}
+
+.data-table td {
+  @apply border-b border-slate-50 px-4 py-3 text-slate-700;
+}
+
+.data-table tr:hover td {
+  @apply bg-sky-50/40;
+}
+
+.badge {
+  @apply inline-flex rounded-lg px-2 py-0.5 text-xs font-medium;
+}
+
+.badge-green {
+  @apply badge bg-emerald-50 text-emerald-700;
+}
+.badge-yellow {
+  @apply badge bg-amber-50 text-amber-700;
+}
+.badge-red {
+  @apply badge bg-red-50 text-red-700;
+}
+.badge-blue {
+  @apply badge bg-sky-50 text-sky-700;
+}
+.badge-gray {
+  @apply badge bg-slate-100 text-slate-600;
+}
+
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-up {
+  animation: fade-up 0.45s ease-out both;
+}
+
+.stagger > * {
+  animation: fade-up 0.4s ease-out both;
+}
+.stagger > *:nth-child(1) {
+  animation-delay: 0.05s;
+}
+.stagger > *:nth-child(2) {
+  animation-delay: 0.1s;
+}
+.stagger > *:nth-child(3) {
+  animation-delay: 0.15s;
+}
+.stagger > *:nth-child(4) {
+  animation-delay: 0.2s;
+}
+.stagger > *:nth-child(5) {
+  animation-delay: 0.25s;
+}
+.stagger > *:nth-child(6) {
+  animation-delay: 0.3s;
+}
