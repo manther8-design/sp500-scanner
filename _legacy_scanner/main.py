@@ -1,3 +1,4 @@
+import os
 import asyncio
 from fastapi import FastAPI, Request
 import httpx
@@ -12,7 +13,7 @@ from sqlalchemy.orm import declarative_base, sessionmaker
 # ==========================================
 # ⚙️ الإعدادات العامة
 # ==========================================
-TELEGRAM_BOT_TOKEN = "8867514375:AAGSH3HABzPZ9HMRvGgLygnZFs37-SbZ9ZE"
+TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
 TELEGRAM_CHAT_ID = "8015039751"
 
 # ==========================================
