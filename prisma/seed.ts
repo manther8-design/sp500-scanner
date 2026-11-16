@@ -417,6 +417,44 @@ async function main() {
       type: "SERVICE",
       unitPrice: 5000,
       taxRate: 15,
+      trackInventory: false,
+    },
+  });
+  await prisma.warehouse.create({
+    data: {
+      companyId: company.id,
+      code: "MAIN",
+      name: "المستودع الرئيسي",
+      branchId: branchRiyadh.id,
+      isDefault: true,
+    },
+  });
+  await prisma.product.create({
+    data: {
+      companyId: company.id,
+      code: "PRD-01",
+      name: "جهاز نقطة بيع",
+      type: "PRODUCT",
+      unitPrice: 1200,
+      costPrice: 800,
+      stockQty: 25,
+      reorderLevel: 5,
+      taxRate: 15,
+      trackInventory: true,
+    },
+  });
+  await prisma.product.create({
+    data: {
+      companyId: company.id,
+      code: "PRD-02",
+      name: "طابعة فواتير",
+      type: "PRODUCT",
+      unitPrice: 450,
+      costPrice: 280,
+      stockQty: 40,
+      reorderLevel: 8,
+      taxRate: 15,
+      trackInventory: true,
     },
   });
 

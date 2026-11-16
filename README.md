@@ -13,11 +13,13 @@
 - لوحة تحكم وتحليل مالي ومساعد ذكي يعتمد على بيانات النظام فقط
 - تعدد الشركات/الفروع وصلاحيات RBAC ومسار تدقيق
 
-## التشغيل
+## التشغيل (محلي / لابتوب)
 
 ```bash
 npm install
-npx prisma db push
+# مهم: استخدم Prisma 6
+npx prisma@6.19.0 generate
+npx prisma@6.19.0 db push
 npm run db:seed
 npm run dev
 ```
@@ -29,9 +31,16 @@ npm run dev
 | admin@elite.sa | Admin@123 | مدير النظام |
 | hr@elite.sa | Hr@12345 | مدير الموارد البشرية |
 
+### تشغيل PostgreSQL عبر Docker
+
+```bash
+docker compose up --build
+```
+
 ## التوثيق
 
-انظر `docs/ARCHITECTURE.md` لمخطط البنية وقاعدة البيانات وخطة التكامل بين الوحدات.
+- `docs/ARCHITECTURE.md` — البنية وERD
+- `docs/DAFTERA_ROADMAP.md` — خارطة التحول لمستوى دفترة (ZATCA، POS، WAC، SaaS)
 
 ## التقنية
 

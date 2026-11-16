@@ -70,6 +70,8 @@ model Company {
   eosPolicies    EosPolicy[]
   incentiveTypes IncentiveType[]
   saudiSettings  SaudiComplianceSettings?
+  warehouses     Warehouse[]
+  stockMovements StockMovement[]
 
   @@unique([organizationId, code])
 }
@@ -381,20 +383,59 @@ model Supplier {
 }
 
 model Product {
-  id          String  @id @default(cuid())
-  companyId   String
-  company     Company @relation(fields: [companyId], references: [id])
-  code        String
-  name        String
-  type        String  @default("SERVICE") // PRODUCT|SERVICE
-  unitPrice   Float   @default(0)
-  costPrice   Float   @default(0)
-  taxRate     Float   @default(15)
-  isActive    Boolean @default(true)
-  salesLines  SalesInvoiceLine[]
+  id            String  @id @default(cuid())
+  companyId     String
+  company       Company @relation(fields: [companyId], references: [id])
+  code          String
+  name          String
+  type          String  @default("SERVICE") // PRODUCT|SERVICE
+  unitPrice     Float   @default(0)
+  costPrice     Float   @default(0) // weighted average cost
+  stockQty      Float   @default(0)
+  reorderLevel  Float   @default(0)
+  taxRate       Float   @default(15)
+  trackInventory Boolean @default(false)
+  isActive      Boolean @default(true)
+  salesLines    SalesInvoiceLine[]
   purchaseLines PurchaseInvoiceLine[]
+  stockMovements StockMovement[]
 
   @@unique([companyId, code])
+}
+
+model Warehouse {
+  id        String   @id @default(cuid())
+  companyId String
+  company   Company  @relation(fields: [companyId], references: [id])
+  code      String
+  name      String
+  branchId  String?
+  isDefault Boolean  @default(false)
+  isActive  Boolean  @default(true)
+  movements StockMovement[]
+
+  @@unique([companyId, code])
+}
+
+model StockMovement {
+  id          String   @id @default(cuid())
+  companyId   String
+  company     Company  @relation(fields: [companyId], references: [id])
+  productId   String
+  product     Product  @relation(fields: [productId], references: [id])
+  warehouseId String?
+  warehouse   Warehouse? @relation(fields: [warehouseId], references: [id])
+  movementType String  // IN|OUT|ADJUST|POS
+  quantity    Float
+  unitCost    Float    @default(0)
+  totalCost   Float    @default(0)
+  referenceType String?
+  referenceId String?
+  notes       String?
+  createdAt   DateTime @default(now())
+
+  @@index([companyId, productId])
+  @@index([referenceType, referenceId])
 }
 
 model SalesInvoice {
@@ -416,6 +457,10 @@ model SalesInvoice {
   paidAmount    Float    @default(0)
   notes         String?
   journalId     String?
+  cogsJournalId String?
+  zatcaUuid     String?
+  zatcaQrBase64 String?  // TLV QR payload (base64)
+  source        String   @default("MANUAL") // MANUAL|POS
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
