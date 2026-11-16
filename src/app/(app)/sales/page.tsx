@@ -30,11 +30,16 @@ export default async function SalesPage() {
 
   return (
     <div className="animate-fade-up space-y-6">
-      <PageHeader title="المبيعات" subtitle="فواتير المبيعات والعملاء" />
+      <PageHeader
+        title="المبيعات"
+        subtitle="فوترة إلكترونية · ترحيل محاسبي تلقائي · رمز ZATCA TLV QR"
+      />
       <SalesClient
         invoices={invoices.map((i) => ({
           ...i,
           invoiceDate: i.invoiceDate.toISOString(),
+          journalId: i.journalId,
+          zatcaQrBase64: i.zatcaQrBase64,
         }))}
         customers={customers}
         products={products}

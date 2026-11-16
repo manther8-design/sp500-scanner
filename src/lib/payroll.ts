@@ -99,7 +99,17 @@ export async function calculatePayrollRun(params: {
   let totalNet = 0;
 
   for (const emp of employees) {
-    const basic = emp.basicSalary || 0;
+    // Prorate by hire/start date within the month: (salary / month_days) × worked days in period
+    const start = emp.startDate || emp.hireDate;
+    let payableDays = monthDays;
+    if (start && start > from) {
+      if (start > to) continue; // hired after this month
+      const startDay = start.getDate();
+      payableDays = monthDays - startDay + 1;
+    }
+    const prorationFactor = monthDays > 0 ? payableDays / monthDays : 1;
+    const fullBasic = emp.basicSalary || 0;
+    const basic = round2(fullBasic * prorationFactor);
     let totalAllowances = 0;
     const allowanceLines: { code: string; name: string; amount: number }[] = [];
     let housing = 0;
@@ -108,8 +118,9 @@ export async function calculatePayrollRun(params: {
 
     for (const a of emp.allowances) {
       const method = a.calcMethod || a.allowanceType.calcMethod;
-      const amount =
-        method === "PERCENT" ? round2((basic * a.value) / 100) : round2(a.value);
+      const raw =
+        method === "PERCENT" ? round2((fullBasic * a.value) / 100) : round2(a.value);
+      const amount = round2(raw * prorationFactor);
       totalAllowances += amount;
       allowanceLines.push({
         code: a.allowanceType.code,
@@ -257,6 +268,14 @@ export async function calculatePayrollRun(params: {
     const net = round2(gross - deductions);
 
     const breakdown = {
+      proration: {
+        fullBasic,
+        payableDays,
+        monthDays,
+        factor: prorationFactor,
+        hireOrStart: start?.toISOString() || null,
+        formula: "(الراتب الأساسي / أيام الشهر) × أيام الاستحقاق في الفترة",
+      },
       allowances: allowanceLines,
       overtime: otLines,
       incentives: emp.incentives.map((i) => ({
@@ -293,7 +312,7 @@ export async function calculatePayrollRun(params: {
         gosiEmployer,
         loanDeduction,
         netSalary: net,
-        workingDays,
+        workingDays: workingDays || payableDays,
         absentDays,
         lateHours,
         otHours,

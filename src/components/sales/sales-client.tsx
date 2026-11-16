@@ -15,6 +15,8 @@ type Invoice = {
   subtotal: number;
   taxAmount: number;
   total: number;
+  journalId?: string | null;
+  zatcaQrBase64?: string | null;
   customer: Customer;
   lines: Array<{ id: string; description: string; quantity: number; unitPrice: number; lineTotal: number }>;
 };
@@ -38,6 +40,23 @@ export function SalesClient({
   const [quantity, setQuantity] = useState("1");
   const [unitPrice, setUnitPrice] = useState(String(products[0]?.unitPrice ?? 0));
   const [description, setDescription] = useState(products[0]?.name || "خدمة");
+  const [qr, setQr] = useState<string | null>(null);
+
+  async function postInvoice(id: string) {
+    setError(null);
+    setLoading(true);
+    try {
+      const res = await fetch(`/api/sales/${id}/post`, { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "فشل الترحيل");
+      setQr(data.qrDataUrl || null);
+      router.refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "خطأ");
+    } finally {
+      setLoading(false);
+    }
+  }
 
   function onProductChange(id: string) {
     setProductId(id);
@@ -146,12 +165,13 @@ export function SalesClient({
               <th>البنود</th>
               <th>الإجمالي</th>
               <th>الحالة</th>
+              <th>ZATCA / ترحيل</th>
             </tr>
           </thead>
           <tbody>
             {invoices.length === 0 ? (
               <tr>
-                <td colSpan={6} className="text-center text-slate-500">
+                <td colSpan={7} className="text-center text-slate-500">
                   لا توجد فواتير مبيعات
                 </td>
               </tr>
@@ -168,9 +188,18 @@ export function SalesClient({
                       </div>
                     ))}
                   </td>
-                  <td className="font-semibold">{formatMoney(inv.total)}</td>
+                  <td className="font-semibold tabular-nums">{formatMoney(inv.total)}</td>
                   <td>
                     <StatusBadge status={inv.status} />
+                  </td>
+                  <td>
+                    {inv.journalId ? (
+                      <span className="badge-green">مرحّلة + QR</span>
+                    ) : (
+                      <button type="button" className="btn-primary !py-1.5 text-xs" disabled={loading} onClick={() => postInvoice(inv.id)}>
+                        ترحيل + QR
+                      </button>
+                    )}
                   </td>
                 </tr>
               ))
@@ -178,6 +207,13 @@ export function SalesClient({
           </tbody>
         </table>
       </div>
+      {qr && (
+        <div className="rounded-2xl border border-slate-200 bg-white p-5 text-center">
+          <div className="mb-2 font-semibold">رمز ZATCA QR (TLV)</div>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={qr} alt="ZATCA QR" className="mx-auto h-40 w-40" />
+        </div>
+      )}
     </div>
   );
 }

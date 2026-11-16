@@ -29,6 +29,10 @@ body {
   min-height: 100vh;
 }
 
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
+
 .font-display {
   font-family: "Space Grotesk", "IBM Plex Sans Arabic", sans-serif;
 }
