@@ -1,0 +1,32 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg: #0b1220;
+  --fg: #edf2f7;
+  --muted: #9aa8bc;
+  --line: rgba(255, 255, 255, 0.08);
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  color: var(--fg);
+  background: #0b1220;
+  min-height: 100vh;
+}
+
+* {
+  border-color: var(--line);
+}
+
+::selection {
+  background: rgba(31, 111, 235, 0.35);
+}
+
+.table-row-hover:hover {
+  background: rgba(255, 255, 255, 0.03);
+}
