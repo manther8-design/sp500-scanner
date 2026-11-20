@@ -1,0 +1,37 @@
+========================================
+  Atlas Markets — تشغيل مباشر على Windows
+========================================
+
+المتطلبات مرة واحدة فقط:
+1) Python 3.11+ من https://www.python.org/downloads/
+   مهم: فعّل "Add python.exe to PATH"
+2) Node.js LTS من https://nodejs.org/
+
+طريقة التشغيل (الأسهل):
+1) انقر مرتين على:  start-api.bat
+   وانتظر حتى يظهر: Application startup complete
+2) انقر مرتين على:  start-web.bat
+3) افتح المتصفح على: http://localhost:3000
+   (أو المنفذ الذي يطبعه Next مثل 3001)
+
+أو من PowerShell داخل مجلد المشروع:
+   powershell -ExecutionPolicy Bypass -File .\start-all.ps1
+
+بعد فتح الواجهة:
+- اذهب إلى "قوائم المراقبة"
+- اضغط "تعبئة 150 سهماً"
+- ثم "مسح القائمة" أو من اللوحة "مسح يدوي الآن"
+
+فحص سريع أن الـ API يعمل:
+افتح: http://127.0.0.1:8000/health
+يجب أن ترى: {"status":"ok","provider":"yfinance"}
+
+إذا ظهر Failed to fetch:
+= الواجهة تعمل لكن start-api.bat غير شغّال. شغّله واترك النافذة مفتوحة.
+
+الملفات المهمة:
+- apps/api     الخادم
+- apps/web     الواجهة
+- data/sp150.csv   قائمة 150 سهم للاستيراد
+- requirements.txt
+========================================
