@@ -1,20 +1,52 @@
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+/**
+ * Empty string = same-origin (recommended). Next.js rewrites proxy /api to the backend.
+ * Set NEXT_PUBLIC_API_URL only if the browser must call the API host directly.
+ */
+const API_URL = (process.env.NEXT_PUBLIC_API_URL || "").replace(/\/$/, "");
+
+function friendlyError(err: unknown): Error {
+  const msg = err instanceof Error ? err.message : String(err);
+  if (
+    msg === "Failed to fetch" ||
+    msg.includes("NetworkError") ||
+    msg.includes("fetch failed") ||
+    msg.includes("ECONNREFUSED")
+  ) {
+    return new Error(
+      "تعذر الاتصال بالخادم. تأكد أن الـ API يعمل على المنفذ 8000 (python -m uvicorn apps.api.app.main:app --port 8000)."
+    );
+  }
+  return err instanceof Error ? err : new Error(msg);
+}
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(`${API_URL}${path}`, {
-    ...init,
-    headers: {
-      ...(init?.body instanceof FormData ? {} : { "Content-Type": "application/json" }),
-      ...(init?.headers || {}),
-    },
-    cache: "no-store",
-  });
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(text || `HTTP ${res.status}`);
+  try {
+    const res = await fetch(`${API_URL}${path}`, {
+      ...init,
+      headers: {
+        ...(init?.body instanceof FormData ? {} : { "Content-Type": "application/json" }),
+        ...(init?.headers || {}),
+      },
+      cache: "no-store",
+    });
+    if (!res.ok) {
+      const text = await res.text();
+      let detail = text || `HTTP ${res.status}`;
+      try {
+        const parsed = JSON.parse(text);
+        if (parsed?.detail) {
+          detail = typeof parsed.detail === "string" ? parsed.detail : JSON.stringify(parsed.detail);
+        }
+      } catch {
+        /* keep raw text */
+      }
+      throw new Error(detail);
+    }
+    if (res.status === 204) return undefined as T;
+    return res.json();
+  } catch (err) {
+    throw friendlyError(err);
   }
-  if (res.status === 204) return undefined as T;
-  return res.json();
 }
 
 export type ProviderStatus = {
