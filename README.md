@@ -26,8 +26,30 @@ python3 -m uvicorn apps.api.app.main:app --reload --port 8000
 ```bash
 cd apps/web
 npm install
-NEXT_PUBLIC_API_URL=http://localhost:8000 npm run dev
+# Browser calls same origin; Next.js proxies /api → backend :8000
+npm run dev
 ```
+
+### Windows PowerShell (two terminals)
+
+Terminal 1 — API (must stay running):
+```powershell
+cd path\to\sp500-scanner
+python -m pip install -r requirements.txt
+$env:PYTHONPATH = "."
+$env:DATABASE_URL = "sqlite:///./scanner.db"
+python -m uvicorn apps.api.app.main:app --reload --port 8000
+```
+
+Terminal 2 — Web:
+```powershell
+cd path\to\sp500-scanner\apps\web
+npm install
+npm run dev
+```
+
+Open http://localhost:3000 (or the port Next prints, e.g. 3001).  
+If you see «Failed to fetch» / تعذر الاتصال: the API on port 8000 is not running.
 
 ## Docker
 

@@ -50,21 +50,38 @@ export default function WatchlistsPage() {
   const createList = () => {
     if (!newName.trim()) return;
     startTransition(async () => {
-      await api.createWatchlist({ name: newName.trim() });
-      setNewName("");
-      await refreshLists();
-      setMessage("تم إنشاء القائمة");
+      try {
+        await api.createWatchlist({ name: newName.trim() });
+        setNewName("");
+        await refreshLists();
+        setMessage("تم إنشاء القائمة");
+      } catch (e) {
+        setMessage(e instanceof Error ? e.message : "تعذر إنشاء القائمة");
+      }
     });
   };
 
   const addSymbol = () => {
-    if (!activeId || !symbol.trim()) return;
+    if (!symbol.trim()) {
+      setMessage("أدخل رمز السهم أولاً");
+      return;
+    }
+    if (!activeId) {
+      setMessage("لا توجد قائمة محددة. أنشئ قائمة أو انتظر تحميل القوائم بعد تشغيل الـ API.");
+      return;
+    }
+    const ticker = symbol.trim().toUpperCase();
     startTransition(async () => {
-      await api.addItem(activeId, symbol.trim().toUpperCase());
-      setSymbol("");
-      const full = await api.watchlist(activeId);
-      setActive(full);
-      setMessage(`تمت إضافة ${symbol.toUpperCase()}`);
+      try {
+        await api.addItem(activeId, ticker);
+        setSymbol("");
+        const full = await api.watchlist(activeId);
+        setActive(full);
+        setLists(await api.watchlists());
+        setMessage(`تمت إضافة ${ticker}`);
+      } catch (e) {
+        setMessage(e instanceof Error ? e.message : "تعذر إضافة السهم");
+      }
     });
   };
 
