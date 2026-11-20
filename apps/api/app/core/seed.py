@@ -1,18 +1,64 @@
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from apps.api.app.core.symbols_sp150 import DEFAULT_SYMBOLS, PINNED_SYMBOLS
 from db.models import DataSource, ScanJob, Stock, UserSettings, Watchlist, WatchlistItem
 
-# Curated starter universe (S&P 500 subset + liquid names). Full universe can be imported via CSV.
-DEFAULT_SYMBOLS = [
-    "AAPL", "MSFT", "NVDA", "AMZN", "META", "GOOGL", "GOOG", "BRK-B", "LLY", "AVGO",
-    "JPM", "TSLA", "V", "UNH", "XOM", "MA", "COST", "PG", "JNJ", "HD",
-    "ABBV", "WMT", "NFLX", "MRK", "BAC", "CRM", "CVX", "AMD", "KO", "PEP",
-    "TMO", "LIN", "ACN", "MCD", "CSCO", "ABT", "WFC", "INTC", "DIS", "IBM",
-    "GE", "CAT", "QCOM", "TXN", "AMAT", "NOW", "ISRG", "SPGI", "BX", "PLTR",
-]
-
 CRYPTO_SYMBOLS = ["BTC-USD", "ETH-USD", "SOL-USD", "AVAX-USD"]
+
+
+def _ensure_stock(db: Session, symbol: str) -> Stock:
+    stock = db.scalar(select(Stock).where(Stock.symbol == symbol))
+    if stock is None:
+        stock = Stock(symbol=symbol)
+        db.add(stock)
+        db.flush()
+    return stock
+
+
+def sync_watchlist_symbols(
+    db: Session,
+    watchlist: Watchlist,
+    symbols: list[str],
+    *,
+    pinned: set[str] | None = None,
+) -> int:
+    """Add any missing symbols to a watchlist. Returns number of newly added items."""
+    pinned = pinned or set()
+    items = db.scalars(
+        select(WatchlistItem).where(WatchlistItem.watchlist_id == watchlist.id)
+    ).all()
+    existing_stock_ids = {item.stock_id for item in items}
+    existing_symbols: set[str] = set()
+    if existing_stock_ids:
+        existing_symbols = set(
+            db.scalars(select(Stock.symbol).where(Stock.id.in_(existing_stock_ids))).all()
+        )
+
+    added = 0
+    for i, symbol in enumerate(symbols):
+        if symbol in existing_symbols:
+            continue
+        stock = _ensure_stock(db, symbol)
+        linked = db.scalar(
+            select(WatchlistItem).where(
+                WatchlistItem.watchlist_id == watchlist.id,
+                WatchlistItem.stock_id == stock.id,
+            )
+        )
+        if linked:
+            continue
+        db.add(
+            WatchlistItem(
+                watchlist_id=watchlist.id,
+                stock_id=stock.id,
+                sort_order=i,
+                is_pinned=symbol in pinned,
+            )
+        )
+        existing_symbols.add(symbol)
+        added += 1
+    return added
 
 
 def seed_defaults(db: Session) -> None:
@@ -46,50 +92,28 @@ def seed_defaults(db: Session) -> None:
                 )
             )
 
-    # Default watchlist
+    # Default watchlist — create or top-up to 150 symbols
     wl = db.scalar(select(Watchlist).where(Watchlist.name == "S&P Core"))
     if wl is None:
         wl = Watchlist(
             name="S&P Core",
-            description="Starter liquid US equities watchlist",
+            description="150 liquid US equities starter watchlist",
             is_default=True,
         )
         db.add(wl)
         db.flush()
+    else:
+        if not wl.description:
+            wl.description = "150 liquid US equities starter watchlist"
 
-        for i, symbol in enumerate(DEFAULT_SYMBOLS):
-            stock = db.scalar(select(Stock).where(Stock.symbol == symbol))
-            if stock is None:
-                stock = Stock(symbol=symbol)
-                db.add(stock)
-                db.flush()
-            db.add(
-                WatchlistItem(
-                    watchlist_id=wl.id,
-                    stock_id=stock.id,
-                    sort_order=i,
-                    is_pinned=symbol in {"AAPL", "NVDA", "MSFT", "TSLA"},
-                )
-            )
+    sync_watchlist_symbols(db, wl, DEFAULT_SYMBOLS, pinned=PINNED_SYMBOLS)
 
     crypto = db.scalar(select(Watchlist).where(Watchlist.name == "Crypto"))
     if crypto is None:
         crypto = Watchlist(name="Crypto", description="Crypto pairs via Yahoo")
         db.add(crypto)
         db.flush()
-        for i, symbol in enumerate(CRYPTO_SYMBOLS):
-            stock = db.scalar(select(Stock).where(Stock.symbol == symbol))
-            if stock is None:
-                stock = Stock(symbol=symbol)
-                db.add(stock)
-                db.flush()
-            db.add(
-                WatchlistItem(
-                    watchlist_id=crypto.id,
-                    stock_id=stock.id,
-                    sort_order=i,
-                )
-            )
+    sync_watchlist_symbols(db, crypto, CRYPTO_SYMBOLS)
 
     # Scan job
     if db.scalar(select(ScanJob).where(ScanJob.name == "default")) is None:
