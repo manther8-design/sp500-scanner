@@ -123,11 +123,33 @@ export default function WatchlistsPage() {
   const runScan = () => {
     if (!activeId) return;
     startTransition(async () => {
-      setMessage("جاري مسح القائمة...");
-      await api.runScan({ watchlist_id: activeId, fetch_history: false });
-      const full = await api.watchlist(activeId);
-      setActive(full);
-      setMessage("اكتمل مسح القائمة");
+      try {
+        setMessage("جاري مسح القائمة...");
+        await api.runScan({ watchlist_id: activeId, fetch_history: false });
+        const full = await api.watchlist(activeId);
+        setActive(full);
+        setMessage("اكتمل مسح القائمة");
+      } catch (e) {
+        setMessage(e instanceof Error ? e.message : "فشل المسح");
+      }
+    });
+  };
+
+  const seed150 = () => {
+    startTransition(async () => {
+      try {
+        setMessage("جاري إضافة 150 سهماً...");
+        const result = await api.seedSp150();
+        await refreshLists();
+        setActiveId(result.watchlist_id);
+        const full = await api.watchlist(result.watchlist_id);
+        setActive(full);
+        setMessage(
+          `قائمة ${result.name}: ${result.item_count} سهم (أُضيف ${result.added} جديد)`
+        );
+      } catch (e) {
+        setMessage(e instanceof Error ? e.message : "تعذر تعبئة القائمة");
+      }
     });
   };
 
@@ -154,6 +176,13 @@ export default function WatchlistsPage() {
             className="rounded-lg border border-white/15 px-3 py-2 text-sm hover:bg-white/5"
           >
             حفظ فترة المسح
+          </button>
+          <button
+            onClick={seed150}
+            disabled={pending}
+            className="rounded-lg border border-accent/40 bg-accent/15 px-3 py-2 text-sm text-white hover:bg-accent/25 disabled:opacity-50"
+          >
+            تعبئة 150 سهماً
           </button>
           <button
             onClick={runScan}

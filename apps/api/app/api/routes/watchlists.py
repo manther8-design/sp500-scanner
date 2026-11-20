@@ -10,6 +10,8 @@ from sqlalchemy.orm import Session, selectinload
 
 from apps.api.app.api.deps import get_market_provider
 from apps.api.app.core.database import get_db
+from apps.api.app.core.seed import sync_watchlist_symbols
+from apps.api.app.core.symbols_sp150 import DEFAULT_SYMBOLS, PINNED_SYMBOLS
 from db.models import QuoteSnapshot, Stock, Watchlist, WatchlistItem
 from db.schemas.watchlist import (
     QuoteBrief,
@@ -115,6 +117,37 @@ def create_watchlist(payload: WatchlistCreate, db: Session = Depends(get_db)) ->
     db.add(wl)
     db.commit()
     return _watchlist_out(db, _get_watchlist(db, wl.id))
+
+
+@router.post("/seed-sp150")
+def seed_sp150_watchlist(db: Session = Depends(get_db)) -> dict[str, Any]:
+    """Fill (or create) the S&P Core watchlist with 150 starter symbols."""
+    wl = db.scalar(select(Watchlist).where(Watchlist.name == "S&P Core"))
+    created = False
+    if wl is None:
+        created = True
+        # Clear other defaults if we create the canonical list
+        for other in db.scalars(select(Watchlist).where(Watchlist.is_default.is_(True))).all():
+            other.is_default = False
+        wl = Watchlist(
+            name="S&P Core",
+            description="150 liquid US equities starter watchlist",
+            is_default=True,
+        )
+        db.add(wl)
+        db.flush()
+
+    added = sync_watchlist_symbols(db, wl, DEFAULT_SYMBOLS, pinned=PINNED_SYMBOLS)
+    db.commit()
+    wl = _get_watchlist(db, wl.id)
+    return {
+        "watchlist_id": wl.id,
+        "name": wl.name,
+        "created": created,
+        "universe_size": len(DEFAULT_SYMBOLS),
+        "added": added,
+        "item_count": len(wl.items),
+    }
 
 
 @router.get("/{watchlist_id}", response_model=WatchlistOut)

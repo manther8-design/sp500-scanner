@@ -182,6 +182,15 @@ export const api = {
       method: "PATCH",
       body: JSON.stringify({ interval_minutes, is_enabled }),
     }),
+  seedSp150: () =>
+    request<{
+      watchlist_id: number;
+      name: string;
+      created: boolean;
+      universe_size: number;
+      added: number;
+      item_count: number;
+    }>("/api/watchlists/seed-sp150", { method: "POST" }),
 };
 
 export function fmtNum(value: number | null | undefined, digits = 2): string {

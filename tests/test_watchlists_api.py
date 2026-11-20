@@ -11,6 +11,8 @@ def test_seeded_watchlists(client):
     names = {w["name"] for w in data}
     assert "S&P Core" in names
     assert "Crypto" in names
+    core = next(w for w in data if w["name"] == "S&P Core")
+    assert core["item_count"] == 150
 
 
 def test_create_and_add_symbol(client):
@@ -79,3 +81,16 @@ def test_telegram_webhook_history(client):
     )
     assert res.status_code == 200
     assert res.json()["status"] == "ok"
+
+
+def test_seed_sp150(client):
+    res = client.post("/api/watchlists/seed-sp150")
+    assert res.status_code == 200
+    body = res.json()
+    assert body["universe_size"] == 150
+    assert body["item_count"] == 150
+    # Idempotent — second call adds nothing new
+    again = client.post("/api/watchlists/seed-sp150")
+    assert again.status_code == 200
+    assert again.json()["added"] == 0
+    assert again.json()["item_count"] == 150
